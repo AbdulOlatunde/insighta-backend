@@ -2,7 +2,6 @@ const express = require("express");
 const axios = require("axios");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // CORS header on every response
 app.use((req, res, next) => {
@@ -10,7 +9,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check route 
+// Health check route
 app.get("/", (req, res) => {
   res.status(200).json({ status: "ok", message: "Genderize API is running" });
 });
@@ -18,7 +17,7 @@ app.get("/", (req, res) => {
 app.get("/api/classify", async (req, res) => {
   const { name } = req.query;
 
-  // Input validation 
+  // Input validation
   if (name === undefined || name === null) {
     return res.status(400).json({
       status: "error",
