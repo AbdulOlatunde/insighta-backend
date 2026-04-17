@@ -1,86 +1,41 @@
+require("dotenv").config();
 const express = require("express");
-const axios = require("axios");
+const connectDB = require("./config/db");
+const profileRoutes = require("./routes/profileRoutes");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Connect to MongoDB
+connectDB();
+
+// Middleware
+app.use(express.json());
 
 // CORS header on every response
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   next();
 });
 
-// Health check route
+// Health check
 app.get("/", (req, res) => {
   res.status(200).json({ status: "ok", message: "Genderize API is running" });
 });
 
-app.get("/api/classify", async (req, res) => {
-  const { name } = req.query;
+// Routes
+app.use("/api/profiles", profileRoutes);
 
-  // Input validation
-  if (name === undefined || name === null) {
-    return res.status(400).json({
-      status: "error",
-      message: "Missing or empty 'name' query parameter",
-    });
-  }
-
-  if (typeof name !== "string" || name.trim() === "") {
-    return res.status(400).json({
-      status: "error",
-      message: "Missing or empty 'name' query parameter",
-    });
-  }
-
-  // Call Genderize API
-  let apiResponse;
-  try {
-    apiResponse = await axios.get("https://api.genderize.io", {
-      params: { name: name.trim() },
-      timeout: 4500,
-    });
-  } catch (err) {
-    return res.status(502).json({
-      status: "error",
-      message: "Failed to reach the Genderize API",
-    });
-  }
-
-  const raw = apiResponse.data;
-
-  // Genderize edge cases
-  if (!raw.gender || raw.count === 0) {
-    return res.status(200).json({
-      status: "error",
-      message: "No prediction available for the provided name",
-    });
-  }
-
-  // Processing rules
-  const gender       = raw.gender;
-  const probability  = raw.probability;
-  const sample_size  = raw.count;
-  const is_confident = probability >= 0.7 && sample_size >= 100;
-  const processed_at = new Date().toISOString();
-
-  return res.status(200).json({
-    status: "success",
-    data: {
-      name: name.trim(),
-      gender,
-      probability,
-      sample_size,
-      is_confident,
-      processed_at,
-    },
-  });
-});
-
-// Catch-all for unexpected errors
+// Global error handler
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ status: "error", message: "Internal server error" });
 });
 
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 module.exports = app;
