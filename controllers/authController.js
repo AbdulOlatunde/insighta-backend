@@ -1,7 +1,7 @@
 const axios = require("axios");
 const { v4: uuidv4 } = require("uuid");
 const User = require("../models/User");
-const RefreshToken = require("../models/refreshToken");
+const RefreshToken = require("../models/RefreshToken");
 const { issueAccessToken, issueRefreshToken } = require("../utils/tokens");
 
 const BACKEND_URL = process.env.BACKEND_URL || "https://hng-genderize-production.up.railway.app";
