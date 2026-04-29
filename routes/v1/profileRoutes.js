@@ -6,7 +6,7 @@ const {
   searchProfiles,
   getProfileById,
   deleteProfile,
-} = require("../controllers/profileController");
+} = require("../../controllers/profileController");
 
 router.post("/", createProfile);
 router.get("/search", searchProfiles); 

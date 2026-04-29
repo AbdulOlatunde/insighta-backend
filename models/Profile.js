@@ -16,7 +16,6 @@ const profileSchema = new mongoose.Schema(
   { versionKey: false }
 );
 
-// Indexes for fast filtering/sorting
 profileSchema.index({ gender: 1 });
 profileSchema.index({ age_group: 1 });
 profileSchema.index({ country_id: 1 });

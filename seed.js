@@ -12,40 +12,36 @@ const seedDB = async () => {
 
     const filePath = path.join(__dirname, "profiles.json");
     if (!fs.existsSync(filePath)) {
-      console.error("profiles.json not found. Place the seed file in the project root.");
+      console.error("profiles.json not found.");
       process.exit(1);
     }
 
-    const raw  = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-    const data = raw.profiles || raw; // handles both { profiles: [...] } and [...]
+    const raw = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    const data = raw.profiles || raw;
     console.log(`Seeding ${data.length} profiles...`);
 
-    let inserted = 0;
-    let skipped  = 0;
-
+    let inserted = 0, skipped = 0;
     for (const p of data) {
       const cleanName = p.name.trim().toLowerCase();
       const exists = await Profile.findOne({ name: cleanName });
       if (exists) { skipped++; continue; }
-
       await Profile.create({
-        id:                  uuidv4(),
-        name:                cleanName,
-        gender:              p.gender,
-        gender_probability:  p.gender_probability,
-        age:                 p.age,
-        age_group:           p.age_group,
-        country_id:          p.country_id,
-        country_name:        p.country_name,
+        id: uuidv4(),
+        name: cleanName,
+        gender: p.gender,
+        gender_probability: p.gender_probability,
+        age: p.age,
+        age_group: p.age_group,
+        country_id: p.country_id,
+        country_name: p.country_name,
         country_probability: p.country_probability,
-        created_at:          new Date().toISOString(),
+        created_at: new Date().toISOString(),
       });
       inserted++;
     }
 
-    console.log(`Done. Inserted: ${inserted}, Skipped (duplicates): ${skipped}`);
+    console.log(`Done. Inserted: ${inserted}, Skipped: ${skipped}`);
     process.exit(0);
-
   } catch (err) {
     console.error("Seed error:", err.message);
     process.exit(1);
