@@ -113,9 +113,13 @@ exports.githubCallback = async (req, res) => {
     });
     res.clearCookie("oauth_state");
 
-    // Redirect to web portal dashboard
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:4000";
-    res.redirect(`${frontendUrl}/dashboard`);
+    // Return tokens as JSON so web portal can set its own cookies
+    return res.status(200).json({
+      status: "success",
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      user: { id: user.id, username: user.username, email: user.email, role: user.role, avatar_url: user.avatar_url },
+    });
   } catch (err) {
     console.error("GitHub callback error:", err.message);
     res.status(500).json({ status: "error", message: "Authentication failed" });
