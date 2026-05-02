@@ -2,7 +2,7 @@ const axios = require("axios");
 const { v4: uuidv4 } = require("uuid");
 const Profile = require("../models/Profile");
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// Helpers
 const getAgeGroup = (age) => {
   if (age <= 12) return "child";
   if (age <= 19) return "teenager";
@@ -23,7 +23,7 @@ const formatProfile = (p) => ({
   created_at: p.created_at,
 });
 
-// ── Country name lookup ────────────────────────────────────────────────────
+// Country name lookup 
 const COUNTRY_NAMES = {
   AF:"Afghanistan",DZ:"Algeria",AO:"Angola",AR:"Argentina",AU:"Australia",
   AT:"Austria",AZ:"Azerbaijan",BD:"Bangladesh",BE:"Belgium",BJ:"Benin",
@@ -53,7 +53,7 @@ const COUNTRY_NAMES = {
 
 const getCountryName = (code) => COUNTRY_NAMES[code] || code;
 
-// ── POST /api/profiles ─────────────────────────────────────────────────────
+// POST /api/profiles
 exports.createProfile = async (req, res) => {
   try {
     const { name } = req.body;
@@ -120,7 +120,7 @@ exports.createProfile = async (req, res) => {
   }
 };
 
-// ── GET /api/profiles ──────────────────────────────────────────────────────
+// GET /api/profiles 
 exports.getAllProfiles = async (req, res) => {
   try {
     const {
@@ -176,7 +176,7 @@ exports.getAllProfiles = async (req, res) => {
   }
 };
 
-// ── GET /api/profiles/search ───────────────────────────────────────────────
+// GET /api/profiles/search
 exports.searchProfiles = async (req, res) => {
   try {
     const { q, page, limit } = req.query;
@@ -198,7 +198,7 @@ exports.searchProfiles = async (req, res) => {
     } else if (hasFemale && !hasMale) {
       filter.gender = "female"; matched = true;
     } else if (hasMale && hasFemale) {
-      matched = true; // both genders — no gender filter, but query is valid
+      matched = true; // both gendersno gender filter but query is valid
     }
 
     // Age group detection
@@ -212,7 +212,7 @@ exports.searchProfiles = async (req, res) => {
       filter.age_group = "senior"; matched = true;
     }
 
-    // "young" → ages 16–24
+    // "young" = ages 16–24
     if (/\byoung\b/.test(query)) {
       filter.age = { $gte: 16, $lte: 24 };
       matched = true;
@@ -231,7 +231,7 @@ exports.searchProfiles = async (req, res) => {
       matched = true;
     }
 
-    // Country — "from <country>" or "in <country>"
+    // Country "from <country>" or "in <country>"
     const countryMatch = query.match(/(?:from|in)\s+([a-z\s]+?)(?:\s+(?:above|below|over|under|aged?|who|that)|$)/);
     if (countryMatch) {
       const countryQuery = countryMatch[1].trim();
@@ -272,7 +272,7 @@ exports.searchProfiles = async (req, res) => {
   }
 };
 
-// ── GET /api/profiles/:id ──────────────────────────────────────────────────
+//  GET /api/profiles/:id
 exports.getProfileById = async (req, res) => {
   try {
     const profile = await Profile.findOne({ id: req.params.id });
@@ -286,7 +286,7 @@ exports.getProfileById = async (req, res) => {
   }
 };
 
-// ── DELETE /api/profiles/:id ───────────────────────────────────────────────
+// DELETE /api/profiles/:id 
 exports.deleteProfile = async (req, res) => {
   try {
     const profile = await Profile.findOneAndDelete({ id: req.params.id });

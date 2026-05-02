@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3000;
 // Connect to MongoDB
 connectDB();
 
-// ── Security middleware ────────────────────────────────────────────────────
+//  Security middleware 
 app.use(helmet());
 app.use(cors({
   origin: [
@@ -24,7 +24,7 @@ app.use(cors({
   credentials: true,
 }));
 
-// ── CORS header for all responses (grading scripts) ───────────────────────
+//  CORS header for all responses
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
@@ -32,23 +32,22 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── General middleware ─────────────────────────────────────────────────────
+// General middleware
 app.use(express.json());
 app.use(cookieParser());
 
-// ── Request logging ────────────────────────────────────────────────────────
+// Request logging
 app.use(morgan(":method :url :status :response-time ms"));
 
-// ── Health check ───────────────────────────────────────────────────────────
+// Health check 
 app.get("/", (req, res) => {
   res.status(200).json({ status: "ok", message: "Insighta Labs+ API is running" });
 });
 
-// ── Routes ─────────────────────────────────────────────────────────────────
-app.use("/auth", authRoutes);
+// Routes
 app.use("/api/profiles", profileRoutes);
 
-// ── Global error handler ───────────────────────────────────────────────────
+//  Global error handler
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ status: "error", message: "Internal server error" });

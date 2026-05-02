@@ -6,8 +6,8 @@ const { issueAccessToken, issueRefreshToken } = require("../utils/tokens");
 
 const BACKEND_URL = process.env.BACKEND_URL || "https://hng-genderize-production.up.railway.app";
 
-// ── GET /auth/github ───────────────────────────────────────────────────────
-// Redirects to GitHub OAuth — web portal flow
+// GET /auth/github
+// Redirects to GitHub OAuth, web portal flow
 exports.githubLogin = (req, res) => {
   const clientId = process.env.GITHUB_CLIENT_ID_WEB;
   const redirectUri = `${BACKEND_URL}/auth/github/callback`;
@@ -20,7 +20,7 @@ exports.githubLogin = (req, res) => {
   res.redirect(url);
 };
 
-// ── GET /auth/github/callback ─────────────────────────────────────────────
+// GET /auth/github/callback
 // Web portal callback
 exports.githubCallback = async (req, res) => {
   try {
@@ -126,8 +126,8 @@ exports.githubCallback = async (req, res) => {
   }
 };
 
-// ── POST /auth/github/cli-callback ────────────────────────────────────────
-// CLI PKCE flow — code + code_verifier sent directly from CLI
+// POST /auth/github/cli-callback 
+// CLI PKCE flow, code + code_verifier sent directly from CLI
 exports.cliCallback = async (req, res) => {
   try {
     const { code, code_verifier, state } = req.body;
@@ -218,7 +218,7 @@ exports.cliCallback = async (req, res) => {
   }
 };
 
-// ── POST /auth/refresh ─────────────────────────────────────────────────────
+//  POST /auth/refresh 
 exports.refreshToken = async (req, res) => {
   try {
     // Accept from body (CLI) or cookie (web)
@@ -270,7 +270,7 @@ exports.refreshToken = async (req, res) => {
   }
 };
 
-// ── POST /auth/logout ──────────────────────────────────────────────────────
+//POST /auth/logout 
 exports.logout = async (req, res) => {
   try {
     const token = req.body.refresh_token || req.cookies?.refresh_token;
@@ -285,7 +285,7 @@ exports.logout = async (req, res) => {
   }
 };
 
-// ── GET /auth/me ───────────────────────────────────────────────────────────
+// GET /auth/me 
 exports.getMe = async (req, res) => {
   const user = req.user;
   return res.status(200).json({
