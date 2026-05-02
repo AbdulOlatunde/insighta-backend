@@ -132,13 +132,17 @@ exports.cliCallback = async (req, res) => {
   try {
     const { code, code_verifier, state } = req.body;
 
-    if (!code || !code_verifier) {
-      return res.status(400).json({ status: "error", message: "Missing code or code_verifier" });
+    if (!code) {
+      return res.status(400).json({ status: "error", message: "Missing code" });
     }
 
-    const clientId = process.env.GITHUB_CLIENT_ID_CLI;
-    const clientSecret = process.env.GITHUB_CLIENT_SECRET_CLI;
-    const redirectUri = "http://localhost:9876/callback";
+    // Detect if this is a web flow or CLI flow
+    const isWebFlow = code_verifier === "web_flow";
+    const clientId = isWebFlow ? process.env.GITHUB_CLIENT_ID_WEB : process.env.GITHUB_CLIENT_ID_CLI;
+    const clientSecret = isWebFlow ? process.env.GITHUB_CLIENT_SECRET_WEB : process.env.GITHUB_CLIENT_SECRET_CLI;
+    const redirectUri = isWebFlow
+      ? `${process.env.FRONTEND_URL}/auth/github/callback`
+      : "http://localhost:9876/callback";
 
     // Exchange code for GitHub token
     const tokenRes = await axios.post(
