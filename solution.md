@@ -63,7 +63,7 @@ The normalization is deterministic and rule-based — no AI involved. It does no
 
 ### Design
 
-The import endpoint is `POST /api/profiles/import` — admin only, accepts a `multipart/form-data` request with a `file` field containing a CSV.
+The import endpoint is `POST /api/profiles/import` admin only, accepts a `multipart/form-data` request with a `file` field containing a CSV.
 
 **Streaming, not buffering**: The CSV is parsed using `csv-parse` in async iterator mode. Rows are processed one at a time and never fully loaded into memory. This allows 500,000-row files to be handled on limited compute.
 
