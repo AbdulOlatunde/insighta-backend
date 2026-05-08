@@ -1,5 +1,8 @@
 const axios = require("axios");
+const cache = require("../utils/cache");
+const { buildCacheKey, buildMongoFilter, normalizeFilters } = require("../utils/queryNormalizer");
 const { v4: uuidv4 } = require("uuid");
+const { stringify } = require("fast-csv");
 const Profile = require("../models/Profile");
 
 // Helpers
@@ -23,7 +26,19 @@ const formatProfile = (p) => ({
   created_at: p.created_at,
 });
 
-// Country name lookup 
+const buildPaginationLinks = (baseUrl, query, page, limit, total) => {
+  const totalPages = Math.ceil(total / limit);
+  const buildUrl = (p) => {
+    const params = new URLSearchParams({ ...query, page: p, limit });
+    return `${baseUrl}?${params.toString()}`;
+  };
+  return {
+    self: buildUrl(page),
+    next: page < totalPages ? buildUrl(page + 1) : null,
+    prev: page > 1 ? buildUrl(page - 1) : null,
+  };
+};
+
 const COUNTRY_NAMES = {
   AF:"Afghanistan",DZ:"Algeria",AO:"Angola",AR:"Argentina",AU:"Australia",
   AT:"Austria",AZ:"Azerbaijan",BD:"Bangladesh",BE:"Belgium",BJ:"Benin",
@@ -53,7 +68,33 @@ const COUNTRY_NAMES = {
 
 const getCountryName = (code) => COUNTRY_NAMES[code] || code;
 
-// POST /api/profiles
+const buildFilter = (query) => {
+  const {
+    gender, age_group, country_id,
+    min_age, max_age,
+    min_gender_probability, min_country_probability,
+  } = query;
+
+  const filter = {};
+  if (gender)     filter.gender     = { $regex: new RegExp(`^${gender}$`, "i") };
+  if (age_group)  filter.age_group  = { $regex: new RegExp(`^${age_group}$`, "i") };
+  if (country_id) filter.country_id = { $regex: new RegExp(`^${country_id}$`, "i") };
+
+  if (min_age !== undefined || max_age !== undefined) {
+    filter.age = {};
+    if (min_age !== undefined) filter.age.$gte = Number(min_age);
+    if (max_age !== undefined) filter.age.$lte = Number(max_age);
+  }
+  if (min_gender_probability !== undefined) {
+    filter.gender_probability = { $gte: Number(min_gender_probability) };
+  }
+  if (min_country_probability !== undefined) {
+    filter.country_probability = { $gte: Number(min_country_probability) };
+  }
+  return filter;
+};
+
+//  POST /api/profiles (admin only) 
 exports.createProfile = async (req, res) => {
   try {
     const { name } = req.body;
@@ -66,7 +107,6 @@ exports.createProfile = async (req, res) => {
     }
 
     const cleanName = name.trim().toLowerCase();
-
     const existing = await Profile.findOne({ name: cleanName });
     if (existing) {
       return res.status(200).json({ status: "success", message: "Profile already exists", data: formatProfile(existing) });
@@ -113,7 +153,6 @@ exports.createProfile = async (req, res) => {
 
     await profile.save();
     return res.status(201).json({ status: "success", data: formatProfile(profile) });
-
   } catch (err) {
     console.error(err);
     return res.status(500).json({ status: "error", message: "Internal server error" });
@@ -123,60 +162,50 @@ exports.createProfile = async (req, res) => {
 // GET /api/profiles 
 exports.getAllProfiles = async (req, res) => {
   try {
-    const {
-      gender, age_group, country_id,
-      min_age, max_age,
-      min_gender_probability, min_country_probability,
-      sort_by, order, page, limit,
-    } = req.query;
-
-    const filter = {};
-
-    if (gender)     filter.gender     = { $regex: new RegExp(`^${gender}$`, "i") };
-    if (age_group)  filter.age_group  = { $regex: new RegExp(`^${age_group}$`, "i") };
-    if (country_id) filter.country_id = { $regex: new RegExp(`^${country_id}$`, "i") };
-
-    if (min_age !== undefined || max_age !== undefined) {
-      filter.age = {};
-      if (min_age !== undefined) filter.age.$gte = Number(min_age);
-      if (max_age !== undefined) filter.age.$lte = Number(max_age);
-    }
-    if (min_gender_probability !== undefined) {
-      filter.gender_probability = { $gte: Number(min_gender_probability) };
-    }
-    if (min_country_probability !== undefined) {
-      filter.country_probability = { $gte: Number(min_country_probability) };
-    }
+    const { sort_by, order, page, limit } = req.query;
+    const filter = buildMongoFilter(req.query);
 
     const allowedSortFields = ["age", "created_at", "gender_probability"];
     const sortField = allowedSortFields.includes(sort_by) ? sort_by : "created_at";
-    const sortOrder = order === "asc" ? 1 : -1;
+    const sortOrder = (order || "").toLowerCase() === "asc" ? 1 : -1;
 
     const pageNum  = Math.max(1, parseInt(page)  || 1);
     const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
     const skip     = (pageNum - 1) * limitNum;
 
+    // Normalized cache key  (same filters always hit same key)
+    const cacheKey = buildCacheKey("profiles", { ...req.query });
+    const cached = await cache.get(cacheKey);
+    if (cached) return res.status(200).json(cached);
+
     const [profiles, total] = await Promise.all([
-      Profile.find(filter).sort({ [sortField]: sortOrder }).skip(skip).limit(limitNum),
+      Profile.find(filter).sort({ [sortField]: sortOrder }).skip(skip).limit(limitNum).lean(),
       Profile.countDocuments(filter),
     ]);
 
-    return res.status(200).json({
+    const totalPages = Math.ceil(total / limitNum);
+    const links = buildPaginationLinks("/api/profiles", req.query, pageNum, limitNum, total);
+
+    const response = {
       status: "success",
       page: pageNum,
       limit: limitNum,
       total,
+      total_pages: totalPages,
       count: profiles.length,
+      links,
       data: profiles.map(formatProfile),
-    });
+    };
 
+    await cache.set(cacheKey, response, 120);
+    return res.status(200).json(response);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
 
-// GET /api/profiles/search
+// GET /api/profiles/search 
 exports.searchProfiles = async (req, res) => {
   try {
     const { q, page, limit } = req.query;
@@ -189,19 +218,13 @@ exports.searchProfiles = async (req, res) => {
     const filter = {};
     let matched = false;
 
-    // Gender detection
     const hasMale   = /\bmales?\b|\bmen\b|\bboys?\b/.test(query);
     const hasFemale = /\bfemales?\b|\bwomen\b|\bgirls?\b/.test(query);
 
-    if (hasMale && !hasFemale) {
-      filter.gender = "male"; matched = true;
-    } else if (hasFemale && !hasMale) {
-      filter.gender = "female"; matched = true;
-    } else if (hasMale && hasFemale) {
-      matched = true; // both gendersno gender filter but query is valid
-    }
+    if (hasMale && !hasFemale) { filter.gender = "male"; matched = true; }
+    else if (hasFemale && !hasMale) { filter.gender = "female"; matched = true; }
+    else if (hasMale && hasFemale) { matched = true; }
 
-    // Age group detection
     if (/\bchildren\b|\bchild\b|\bkids?\b/.test(query)) {
       filter.age_group = "child"; matched = true;
     } else if (/\bteen(ager)?s?\b/.test(query)) {
@@ -212,36 +235,20 @@ exports.searchProfiles = async (req, res) => {
       filter.age_group = "senior"; matched = true;
     }
 
-    // "young" = ages 16–24
     if (/\byoung\b/.test(query)) {
-      filter.age = { $gte: 16, $lte: 24 };
-      matched = true;
+      filter.age = { $gte: 16, $lte: 24 }; matched = true;
     }
 
-    // above/over/below/under <number>
     const aboveMatch = query.match(/(?:above|over)\s+(\d+)/);
     const belowMatch = query.match(/(?:below|under)\s+(\d+)/);
+    if (aboveMatch) { filter.age = { ...(filter.age || {}), $gte: Number(aboveMatch[1]) }; matched = true; }
+    if (belowMatch) { filter.age = { ...(filter.age || {}), $lte: Number(belowMatch[1]) }; matched = true; }
 
-    if (aboveMatch) {
-      filter.age = { ...(filter.age || {}), $gte: Number(aboveMatch[1]) };
-      matched = true;
-    }
-    if (belowMatch) {
-      filter.age = { ...(filter.age || {}), $lte: Number(belowMatch[1]) };
-      matched = true;
-    }
-
-    // Country "from <country>" or "in <country>"
     const countryMatch = query.match(/(?:from|in)\s+([a-z\s]+?)(?:\s+(?:above|below|over|under|aged?|who|that)|$)/);
     if (countryMatch) {
       const countryQuery = countryMatch[1].trim();
-      const matchedEntry = Object.entries(COUNTRY_NAMES).find(
-        ([, name]) => name.toLowerCase() === countryQuery
-      );
-      if (matchedEntry) {
-        filter.country_id = matchedEntry[0];
-        matched = true;
-      }
+      const matchedEntry = Object.entries(COUNTRY_NAMES).find(([, name]) => name.toLowerCase() === countryQuery);
+      if (matchedEntry) { filter.country_id = matchedEntry[0]; matched = true; }
     }
 
     if (!matched) {
@@ -252,27 +259,74 @@ exports.searchProfiles = async (req, res) => {
     const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
     const skip     = (pageNum - 1) * limitNum;
 
+    // Normalize filter and cache (same semantic query = same key)
+    const cacheKey = buildCacheKey("search", { ...filter, page: pageNum, limit: limitNum });
+    const cached = await cache.get(cacheKey);
+    if (cached) return res.status(200).json(cached);
+
     const [profiles, total] = await Promise.all([
-      Profile.find(filter).skip(skip).limit(limitNum),
+      Profile.find(filter).skip(skip).limit(limitNum).lean(),
       Profile.countDocuments(filter),
     ]);
 
-    return res.status(200).json({
+    const totalPages = Math.ceil(total / limitNum);
+    const links = buildPaginationLinks("/api/profiles/search", { q }, pageNum, limitNum, total);
+
+    const response = {
       status: "success",
       page: pageNum,
       limit: limitNum,
       total,
+      total_pages: totalPages,
       count: profiles.length,
+      links,
       data: profiles.map(formatProfile),
-    });
+    };
 
+    await cache.set(cacheKey, response, 120);
+    return res.status(200).json(response);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
 
-//  GET /api/profiles/:id
+// GET /api/profiles/export 
+exports.exportProfiles = async (req, res) => {
+  try {
+    const { sort_by, order } = req.query;
+    const filter = buildMongoFilter(req.query);
+
+    const allowedSortFields = ["age", "created_at", "gender_probability"];
+    const sortField = allowedSortFields.includes(sort_by) ? sort_by : "created_at";
+    const sortOrder = order === "asc" ? 1 : -1;
+
+    const profiles = await Profile.find(filter).sort({ [sortField]: sortOrder });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="profiles_${timestamp}.csv"`);
+
+    const csvStream = stringify({
+      headers: ["id", "name", "gender", "gender_probability", "age", "age_group",
+                 "country_id", "country_name", "country_probability", "created_at"],
+    });
+
+    csvStream.pipe(res);
+    for (const p of profiles) {
+      csvStream.write([
+        p.id, p.name, p.gender, p.gender_probability, p.age, p.age_group,
+        p.country_id, p.country_name, p.country_probability, p.created_at,
+      ]);
+    }
+    csvStream.end();
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+//  GET /api/profiles/:id 
 exports.getProfileById = async (req, res) => {
   try {
     const profile = await Profile.findOne({ id: req.params.id });
@@ -286,7 +340,7 @@ exports.getProfileById = async (req, res) => {
   }
 };
 
-// DELETE /api/profiles/:id 
+//  DELETE /api/profiles/:id (admin only)
 exports.deleteProfile = async (req, res) => {
   try {
     const profile = await Profile.findOneAndDelete({ id: req.params.id });
